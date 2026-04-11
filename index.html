@@ -2,36 +2,488 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>B.Sc. MLS Year 2 Timetable</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>B.Sc. MLS Year 2 Timetable · Live View</title>
   <style>
-    body {
+    * {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* base layout: full viewport, flexible */
+    html, body {
+      height: 100%;
+      width: 100%;
+      background: #f1f4f9;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;          /* prevent body scroll, iframe handles content */
+    }
+
+    /* ----- header area (responsive + refresh) ----- */
+    .timetable-header {
+      background: white;
+      backdrop-filter: blur(0px);
+      padding: 0.75rem 1.5rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem 1.5rem;
+      z-index: 10;
+      border-bottom: 1px solid #e9edf2;
+    }
+
+    .title-section {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.75rem;
     }
 
     h1 {
-      text-align: center;
-      padding: 15px;
+      font-size: 1.55rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      background: linear-gradient(135deg, #1a2a3f, #0f2b3d);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
       margin: 0;
-      background-color: #ffffff;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      line-height: 1.2;
     }
 
-    iframe {
-      width: 100%;
-      height: calc(100vh - 70px);
+    .badge {
+      background: #eef2ff;
+      color: #1e3a8a;
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 0.2rem 0.65rem;
+      border-radius: 30px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge::before {
+      content: "🔄";
+      font-size: 0.7rem;
+    }
+
+    .refresh-panel {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .last-updated {
+      font-size: 0.75rem;
+      color: #4b5563;
+      background: #f8fafc;
+      padding: 0.3rem 0.8rem;
+      border-radius: 40px;
+      border: 1px solid #e2e8f0;
+      font-family: monospace;
+      letter-spacing: 0.2px;
+    }
+
+    .refresh-btn {
+      background: #1f2e3f;
       border: none;
+      color: white;
+      font-weight: 500;
+      font-size: 0.85rem;
+      padding: 0.45rem 1.1rem;
+      border-radius: 200px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      backdrop-filter: blur(2px);
+    }
+
+    .refresh-btn:hover {
+      background: #0f2a3b;
+      transform: scale(0.97);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .refresh-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* icon inside button */
+    .refresh-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: white;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    /* iframe container: takes remaining space, ensures no overflow */
+    .iframe-wrapper {
+      flex: 1;
+      position: relative;
+      background: #fefefe;
+      min-height: 0;    /* flex limitation fix */
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* the actual iframe: fully responsive & scrollable inside */
+    .timetable-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+      display: block;
+    }
+
+    /* small loading hint (soft) */
+    .loading-placeholder {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,245,0.9);
+      padding: 0.8rem 1.5rem;
+      border-radius: 60px;
+      font-size: 0.85rem;
+      color: #2c5f7a;
+      pointer-events: none;
+      z-index: 5;
+      backdrop-filter: blur(6px);
+      font-weight: 500;
+      transition: opacity 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      border: 1px solid #e2edf2;
+    }
+
+    /* hide loading when iframe loads */
+    .iframe-wrapper.loaded .loading-placeholder {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    /* small screen optimizations */
+    @media (max-width: 640px) {
+      .timetable-header {
+        padding: 0.7rem 1rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      .badge {
+        font-size: 0.6rem;
+        padding: 0.15rem 0.55rem;
+      }
+      .refresh-btn {
+        padding: 0.35rem 0.9rem;
+        font-size: 0.75rem;
+      }
+      .last-updated {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.65rem;
+      }
+      .refresh-panel {
+        gap: 0.6rem;
+      }
+    }
+
+    /* landscape mode or very short screens: still usable */
+    @media (max-width: 480px) {
+      .timetable-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .refresh-panel {
+        width: 100%;
+        justify-content: space-between;
+      }
+    }
+
+    /* accessibility & focus */
+    .refresh-btn:focus-visible {
+      outline: 2px solid #0066cc;
+      outline-offset: 2px;
+    }
+
+    /* subtle scroll inside iframe is natural */
+    .timetable-frame {
+      overflow: auto;
     }
   </style>
 </head>
-
 <body>
 
-<h1>B.Sc. MLS Year 2 Timetable</h1>
+<div class="timetable-header">
+  <div class="title-section">
+    <h1>📋 B.Sc. MLS Year 2 · Timetable</h1>
+    <span class="badge">live from Google Sheets</span>
+  </div>
+  <div class="refresh-panel">
+    <div class="last-updated" id="lastRefreshBadge">
+      ⏱️ loading...
+    </div>
+    <button class="refresh-btn" id="manualRefreshBtn" aria-label="Refresh timetable data">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6" />
+        <path d="M1 20v-6h6" />
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+        <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+      </svg>
+      <span>Refresh now</span>
+    </button>
+  </div>
+</div>
 
-<iframe src="https://docs.google.com/spreadsheets/d/e/2PACX-1vT6XR71PzLI5yci7PtO9g8kuuh0w1j1dAjP4ZnSQKKL2KBcFEnrD5Uiiy9OLTxk4ByrfXHcbB8eX_76/pubhtml?gid=1296464801&single=true"></iframe>
+<div class="iframe-wrapper" id="iframeWrapper">
+  <div class="loading-placeholder" id="loadingHint">
+    📡 Loading latest timetable from Google Sheets...
+  </div>
+  <iframe class="timetable-frame" id="sheetIframe" title="B.Sc. MLS Year 2 Timetable - Live Google Sheet" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-same-origin allow-top-navigation allow-modals"></iframe>
+</div>
 
+<noscript>
+  <div style="background:#fff3cd; padding:1rem; text-align:center; border:1px solid #ffeeba; margin:1rem;">
+    ⚠️ JavaScript is disabled. For real-time updates, please enable JS or 
+    <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vT6XR71PzLI5yci7PtO9g8kuuh0w1j1dAjP4ZnSQKKL2KBcFEnrD5Uiiy9OLTxk4ByrfXHcbB8eX_76/pubhtml?gid=1296464801&single=true" target="_blank">open timetable directly</a>.
+  </div>
+  <iframe class="timetable-frame" style="height:85vh;" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vT6XR71PzLI5yci7PtO9g8kuuh0w1j1dAjP4ZnSQKKL2KBcFEnrD5Uiiy9OLTxk4ByrfXHcbB8eX_76/pubhtml?gid=1296464801&single=true" title="Timetable fallback"></iframe>
+</noscript>
+
+<script>
+  (function() {
+    // ---------- CONFIGURATION ----------
+    // Base public Google Sheets URL (exactly as provided, with gid and single view)
+    const BASE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT6XR71PzLI5yci7PtO9g8kuuh0w1j1dAjP4ZnSQKKL2KBcFEnrD5Uiiy9OLTxk4ByrfXHcbB8eX_76/pubhtml?gid=1296464801&single=true";
+    
+    // DOM elements
+    const iframe = document.getElementById('sheetIframe');
+    const refreshBtn = document.getElementById('manualRefreshBtn');
+    const lastUpdatedSpan = document.getElementById('lastRefreshBadge');
+    const wrapper = document.getElementById('iframeWrapper');
+    const loadingHint = document.getElementById('loadingHint');
+    
+    // Helper: generate fresh URL with cache-busting timestamp
+    // This forces Google's published endpoint to deliver latest sheet data
+    // (bypasses aggressive browser & CDN caching)
+    function getFreshSheetUrl() {
+      const timestamp = Date.now();
+      // Append a unique parameter '_cb' that changes on every load/refresh.
+      // Google Sheets pubhtml still respects this and serves fresh version.
+      // Also helps to avoid any stale iframe content.
+      if (BASE_SHEET_URL.includes('?')) {
+        return `${BASE_SHEET_URL}&_cb=${timestamp}`;
+      } else {
+        return `${BASE_SHEET_URL}?_cb=${timestamp}`;
+      }
+    }
+    
+    // Update "last updated" visual timestamp
+    function updateTimestampDisplay() {
+      const now = new Date();
+      const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit', second:'2-digit' });
+      const formattedDate = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      lastUpdatedSpan.innerHTML = `🕒 ${formattedDate} · ${formattedTime}`;
+    }
+    
+    // Show/hide loading indicator gracefully
+    let loadingTimeout = null;
+    function showLoadingState() {
+      if (loadingHint) {
+        loadingHint.style.opacity = '1';
+        loadingHint.style.visibility = 'visible';
+      }
+      if (wrapper) wrapper.classList.remove('loaded');
+      // if load takes > 4 sec, keep hint visible anyway
+      if (loadingTimeout) clearTimeout(loadingTimeout);
+    }
+    
+    function hideLoadingState() {
+      if (loadingTimeout) clearTimeout(loadingTimeout);
+      if (wrapper) wrapper.classList.add('loaded');
+      if (loadingHint) {
+        // small delay to avoid flicker if load is extremely fast
+        setTimeout(() => {
+          if (loadingHint) {
+            loadingHint.style.opacity = '0';
+            loadingHint.style.visibility = 'hidden';
+          }
+        }, 120);
+      }
+    }
+    
+    // Core: reload iframe with latest cache-busting URL
+    // Also ensures that any updates from google sheet are displayed immediately
+    function refreshTimetable() {
+      if (!iframe) return;
+      
+      // Show loading feedback
+      showLoadingState();
+      
+      // Build new URL with fresh timestamp
+      const freshUrl = getFreshSheetUrl();
+      
+      // Important: set iframe src to new URL -> forces reload of published sheet
+      // This discards any previous cached representation
+      iframe.src = freshUrl;
+      
+      // Update last refreshed timestamp in UI
+      updateTimestampDisplay();
+      
+      // Set an extra safety: iframe onload event to hide loader
+      // Remove previous listener to avoid multiple bindings
+      iframe.onload = function() {
+        hideLoadingState();
+        // Small extra: ensure that if the sheet is huge, loading state hides after load
+      };
+      
+      // Edge case: if loading fails or network slow, still hide loader after max 8 sec
+      setTimeout(() => {
+        if (wrapper && !wrapper.classList.contains('loaded')) {
+          hideLoadingState();
+        }
+      }, 8000);
+    }
+    
+    // ---- initial load: ensures no stale google sheet view ----
+    // We also preload the iframe after page ready (avoids empty src issue)
+    function init() {
+      // set initial fresh iframe (cache-proof)
+      refreshTimetable();
+      
+      // attach manual refresh button listener
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          // provide tactile feedback + reload
+          refreshTimetable();
+          // optional: small vibration-like for mobile? not needed
+        });
+      }
+      
+      // Optional: handle visibility API? if user returns to tab after long time,
+      // we could auto-refresh to guarantee latest data. But manual refresh is enough.
+      // But we add a subtle "resume" refresh if page becomes visible after > 10 min
+      let lastHiddenTime = Date.now();
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          const hiddenDuration = Date.now() - lastHiddenTime;
+          // If tab was hidden for more than 10 minutes, automatically refresh once
+          // to reflect any Google Sheets updates made in background (improves 'without delay')
+          if (hiddenDuration > 10 * 60 * 1000) {
+            refreshTimetable();
+          }
+        } else {
+          lastHiddenTime = Date.now();
+        }
+      });
+      
+      // If the iframe fails to load due to network errors, user can retry manually.
+      // provide an extra robust fallback: if iframe error, show console note, but refresh button works
+      iframe.onerror = function() {
+        console.warn("Timetable iframe failed to load, check network or Google Sheets public access.");
+        hideLoadingState();
+        lastUpdatedSpan.innerHTML = "⚠️ Refresh failed — tap to retry";
+        setTimeout(() => {
+          if (lastUpdatedSpan && !lastUpdatedSpan.innerHTML.includes('🕒')) {
+            updateTimestampDisplay();
+          }
+        }, 3000);
+      };
+    }
+    
+    // Run once DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+    
+    // ensure that iframe container fits perfectly on resize/orientation change
+    window.addEventListener('resize', () => {
+      // trivial: force iframe to re-evaluate layout (some mobile browsers need)
+      if (iframe && iframe.style) {
+        // no-op: just triggers repaint, ensures responsiveness
+        iframe.style.transform = 'translateZ(0)';
+        setTimeout(() => { if (iframe) iframe.style.transform = ''; }, 100);
+      }
+    });
+    
+    // Bonus: Add an extra "auto-refresh" for users who keep the page open for hours?
+    // Not mandatory but reduces delay even more (optional). However, Google Sheets updates
+    // are already reflected on every manual refresh & on page revisit.
+    // We add a subtle periodic refresh? could be disruptive but we implement a gentle 20min interval?
+    // Only if the page is visible and user might want latest. But to avoid excessive requests,
+    // we do an interval that auto-refreshes only if the page has focus and not recently refreshed.
+    // This respects "without significant delay" even if user forgets to click.
+    let autoRefreshInterval = null;
+    let lastAutoRefresh = 0;
+    const AUTO_REFRESH_MS = 20 * 60 * 1000; // 20 minutes (good balance)
+    
+    function startGentleAutoRefresh() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      autoRefreshInterval = setInterval(() => {
+        // Only auto-refresh when page is visible and if it's been > 15 minutes since last manual/auto refresh
+        const now = Date.now();
+        const timeSinceLast = now - lastAutoRefresh;
+        if (!document.hidden && timeSinceLast > AUTO_REFRESH_MS - 60000) {
+          // auto refresh to guarantee latest timetable changes appear
+          refreshTimetable();
+          lastAutoRefresh = now;
+        }
+      }, 5 * 60 * 1000); // check every 5 minutes
+    }
+    
+    // override refreshTimetable to also update lastAutoRefresh timestamp
+    const originalRefresh = refreshTimetable;
+    window.refreshTimetable = function() {
+      lastAutoRefresh = Date.now();
+      originalRefresh();
+    };
+    refreshTimetable = function() {
+      lastAutoRefresh = Date.now();
+      originalRefresh();
+    };
+    // rebind click listener to use updated function
+    if (refreshBtn) {
+      // remove old listener and attach new one with updated reference
+      const newBtn = refreshBtn.cloneNode(true);
+      refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+      window.refreshBtn = newBtn;
+      newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        lastAutoRefresh = Date.now();
+        originalRefresh();
+      });
+    }
+    
+    // re-assign global for internal usage
+    window.__refreshFn = originalRefresh;
+    // start auto-refresh background updater (keeps sheet fresh for long sessions)
+    startGentleAutoRefresh();
+    
+    // final polish: attach load listener to hide loading correctly after first load
+    iframe.addEventListener('load', () => {
+      hideLoadingState();
+    });
+  })();
+</script>
 </body>
 </html>
